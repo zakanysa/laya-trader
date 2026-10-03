@@ -1,70 +1,89 @@
-# jev-trader
+# Laya Trader
 
-One decision every Monad block. A TypeSafe Jev model watches the Kuru MON-USDC order book and answers buy or sell every ~300 ms. Every block posts a real post-only limit order on that side, one tick inside the touch, replacing the last one. Fills happen when a taker hits it, so the bot earns the spread instead of paying it. A small server streams every block to the dashboard.
+**Can a small bot make money trading on an on-chain order book?** This project started as a fork of [jev-trader](https://github.com/jarrodwatts/jev-trader), a demo where an AI model makes a buy or sell call on every 300 ms [Monad](https://monad.xyz) block and posts an order on Kuru's on-chain order book. The fork swapped TypeSafe's closed Jev model for [Laya](https://github.com/NandhaKishorM/laya), its open-weights alternative. When the goal became making money, it turned into a measured study of whether any strategy here survives real costs.
 
-## Run
+**The answer was no.** The evidence:
 
-    cp .env.example .env
+| Approach | Result |
+|---|---|
+| The original design (a new order every block) | **−$16/h** in simulation: gas costs ~10x what the orders can earn |
+| An AI predicting 30-second direction (Jev, Laya) | Not worth training: the signals it would learn from (momentum, taker flow, even Binance's lead) scored 50–52%, inside the noise |
+| Market making around Binance's price, MON-USDC | 0 of 360 settings profitable after gas |
+| Same, on the best Kuru market (cbBTC-USDC) | +$0.35/h of edge in a 48 h live forward test, swamped by ±$20–75 inventory swings: **no-go** |
+
+Twice, a strategy looked profitable and wasn't: once by holding MON in a 17% rally, once by riding BTC's moves. Both were caught by breaking P&L down into the edge at the fill and what inventory did. The methods that caught them are the useful output here. **[RETROSPECTIVE.md](RETROSPECTIVE.md) has the full story, the numbers, and what might work instead.**
+
+## What's in it
+
+| Part | Where |
+|---|---|
+| Laya as a drop-in for Jev: a compact market state, a Jev-compatible model server, a client | `src/laya.ts`, `laya/` |
+| A data collector and a Kaggle notebook that fine-tunes Laya with a time-ordered split, baselines and calibration | `STATE_LOG=true`, `notebooks/` |
+| A deliberately pessimistic exchange simulator: latency, reverts, queue position, gas, faster traders picking off stale quotes | `src/sim.ts` |
+| Two-sided market making around a Binance-based fair value, re-quoting only when needed | `src/strategy.ts`, `src/fair.ts` |
+| A backtester: tuned on older data, tested on newer, stress tests, ranked by P&L without inventory luck | `scripts/backtest.ts` |
+| Market research: scan every Kuru market, rebuild any order book from chain state, fetch Kuru and Binance history | `scripts/scan-markets.ts`, `backfill-book.ts`, `fetch-market.ts`, `fetch-history.ts`, `probe-makers.ts` |
+| A live or dry-run market maker (the dry run is a forward test using the same simulator), with reporting | `STRATEGY=maker`, `src/maker.ts`, `scripts/maker-report.ts` |
+
+Bun and TypeScript throughout, ethers v5 and the Kuru SDK on Monad, Python for Laya and the notebook, Next.js for the inherited dashboard in `web/`.
+
+## Running it
+
+Experimental research code, not financial advice. Without `PRIVATE_KEY` everything below is a dry run: real market data, simulated fills, no wallet. The live maker path has not been run with real funds.
+
     bun install
-    bun run start
+    bun run start                         # the original directional bot, mock model, dry run
 
-With no `PRIVATE_KEY` it dry-runs: real book, real decisions, simulated fills. Set `MODEL=jev` and `TYPESAFE_AI_API_KEY` to use Jev; the default `mock` is a momentum heuristic stand-in.
+### Models: mock, Jev, Laya
 
-## Endpoints
+`MODEL=mock` (default) is a momentum stand-in. `MODEL=jev` with `TYPESAFE_AI_API_KEY` uses Jev. `MODEL=laya` talks to a self-hosted Laya:
 
-Deployed (dry run, mock model): https://jev-trader-production.up.railway.app
+    STATE_LOG=true bun run start                              # 1. collect training rows to data/laya/ (~250 MB/day)
+    # 2. upload data/laya/ to Kaggle, run notebooks/laya_trader_finetune_kaggle.ipynb on GPU T4 x2
+    pip install -r laya/requirements.txt
+    LAYA_CHECKPOINT=./laya-trader python laya/server.py       # 3. serve it (needs a GPU to fit a 300 ms block)
+    MODEL=laya bun run start
 
-- `GET /` snapshot: model, wallet, dryRun, latest block event
-- `GET /history` last 1000 block events
-- `GET /events` SSE: `snapshot` on connect, then one `block` event per block, plus a `fill` event whenever a live order's receipt lands
+`laya/question.json` is the one question both the bot and the notebook use. Changing it, or the state in `src/laya.ts` (bump `LAYA_STATE_VERSION`), means fresh data and retraining.
 
-Every event (see `src/trader.ts` for types):
+### Research tools
 
-    {
-      "block": 105488269, "ts": 1789593630676,
-      "mid": 0.022636, "bestBid": 0.022628, "bestAsk": 0.022644, "spreadBps": 7.07,
-      "decision": { "action": "buy", "probabilities": { "buy": 0.77, "sell": 0.23, "hold": 0 }, "upIn10": 0.77, "latencyMs": 81, "late": false },
-      "quote": { "side": "buy", "price": 0.022629, "size": 200, "txHash": "0x…", "gasMon": 0.0357, "cancel": [100295801], "status": "sent", "orderId": null, "capped": false },
-      "fill": null,
-      "resting": { "bidMon": 200, "askMon": 200 },
-      "position": { "side": "short", "size": 200, "entryPrice": 0.022633, "unrealizedUsd": -0.0006, "unrealizedMon": -0.027 },
-      "totals": { "blocks": 3, "decisions": 3, "quotes": 3, "fills": 1, "reverted": 0, "lateBlocks": 0, "jevUsd": 0.000004, "gasMon": 0.107, "gasUsd": 0.0024, "realizedUsd": 0, "pnlUsd": -0.003, "pnlMon": -0.13, "pnlPct": -0.003 }
-    }
+    bun run scripts/scan-markets.ts 24                        # every Kuru market: volume, spread, competition, Binance reference
+    bun run scripts/backfill-book.ts <market> 24 3            # rebuild its book every 3 blocks (public RPC keeps ~5.5 days)
+    bun run scripts/fetch-market.ts <market> BTCUSDT          # its Kuru trades + Binance 1 s prices
+    bun run scripts/backtest.ts --market <market> --mon-usd 0.034 --pickoff 3 --rank hedged
+    bun run scripts/backtest.ts --market <market> --mon-usd 0.034 --params '{...}' --windows 6 --ref-delay 2000
+    bun run scripts/backtest.ts                                # MON-USDC from the collected data (needs fetch-history.ts first)
 
-Every block the model is asked about the move over `HORIZON_BLOCKS` (default 100, ~30 s) and answers `buy` or `sell`. `quote` is the order that block put on the book: a post-only limit order of `TRADE_SIZE_MON` on that side, `QUOTE_INSIDE_TICKS` inside the touch (clamped to the touch when the spread is too tight), in one `batchUpdate` that also cancels everything we had resting (`cancel`). `hold` appears only with `decision.late: true`, when the model missed the block and nothing was posted. When the position cap (or, live, margin funds) blocks a side, the quote goes on the other side with `capped: true` and `probabilities` still show the model's call. `resting` is our size known to be on the book after this block. `upIn10` equals the buy probability.
+`rpc.monad.xyz` allows 50 calls a second, counting each call in a batch. Run backfills against `READ_RPC_URL=https://rpc1.monad.xyz` so a running bot keeps its share.
 
-Live sends are fired and forgotten, so the `block` event carries the **intent**: `status: "sent"`, `gasMon` is `gasLimit x (last known base fee + priority)`. Monad charges the gas limit, so that is the real cost whether the order lands or not. The receipt arrives a block or two later as its own SSE event:
+### Maker mode
 
-    event: quote
-    data: { "block": 105488269, "quote": { …, "status": "placed", "orderId": 100295812, "gasMon": 0.0357 } }
+    STRATEGY=maker MARKET=0x40c49f171202f91ff5d2fae34c22dd2bfdd22af0 REF_SYMBOL=BTCUSDT REF_VENUE=spot \
+    HALF_SPREAD_BPS=3 REQUOTE_BPS=8 DANGER_BPS=2 QUOTE_SIZE=0.00239 MAX_INVENTORY=0.0359 SKEW_BPS=2 \
+    MAX_LOSS_USD=25 bun run start
+    bun run scripts/maker-report.ts                            # P&L, P&L without inventory, windows, busy vs quiet hours
 
-`status` becomes `placed` (with the order id) or `reverted` (the book moved through the price before the tx landed, or a cancelled order had already filled). No receipt after 10 blocks gives `lost`. Fills are not in our own transactions: someone else's taker order hits our resting one, and the Trade log for it arrives via the same `eth_getLogs` poll that feeds the model. Each block with fills gets its own SSE event, and `position`, `realizedUsd` and `fills` update then:
+Two-sided post-only quotes around Binance's price, sent in one `batchUpdate` and replaced only when they drift or become dangerous. Live, the wallet needs MON for gas and margin in both assets (`MARGIN_BASE`, `MARGIN_QUOTE`). `MAX_LOSS_USD` pulls every quote but **does not close the position**. In the forward test the loss kept running to −$76 after a −$25 stop, so fix that before any live use.
 
-    event: fill
-    data: { "block": 105488271, "fill": { "side": "buy", "size": 200, "price": 0.022629, "txHash": "0x…", "orderId": 100295812, "simulated": false } }
+## How it fits together
 
-`txHash` is the taker's transaction. In a dry run the quote is `status: "sim"`: the order rests for one block and a real print crossing its price fills it (`simulated: true`).
+    src/config.ts     env
+    src/chain.ts      block feed (WebSocket newHeads + polling backstop), raw RPC
+    src/book.ts       one-eth_call order book reader (getL2Book, AMM vault)
+    src/market.ts     Kuru: batchUpdate (one side or both), margin deposits, nonce, receipts
+    src/trades.ts     Trade-log feed: everyone's prints, and our fills
+    src/model.ts      directional models: mock, Jev, Laya (src/laya.ts)
+    src/trader.ts     directional loop: one order per block
+    src/maker.ts      maker loop: live, or dry run on src/sim.ts
+    src/strategy.ts   where to quote, and when to re-quote
+    src/fair.ts       fair value: Binance price x slow Kuru basis
+    src/binance.ts    Binance trade stream, with a stall watchdog
+    src/sim.ts        pessimistic exchange simulator (shared by backtest and dry run)
+    src/server.ts     snapshot, history, SSE for the dashboard
 
-## Layout
+The original bot's event format and its 300 ms latency budget are documented in [docs/original-bot.md](docs/original-bot.md), and the upstream product spec in [docs/upstream-spec.md](docs/upstream-spec.md).
 
-    src/config.ts   env
-    src/chain.ts    block feed (WebSocket newHeads + polling backstop, newest block only), raw RPC
-    src/book.ts     one-eth_call order book reader (decodes getL2Book, merges the AMM vault)
-    src/market.ts   Kuru: read book, hand-encoded batchUpdate (cancel + post-only place), margin deposits, local nonce, async confirmation
-    src/model.ts    Model interface, JevModel (AI SDK experimental_evaluate), MockModel
-    src/trader.ts   the loop: one in flight, hold when late, position and P&L accounting
-    src/server.ts   Bun.serve: snapshot, history, SSE
+## Credits
 
-## The 300 ms budget
-
-A decision and an order have to fit in one block, so the hot loop makes exactly two RPC round trips:
-one `eth_call` for the book (~18 ms on the public RPC, `READ_RPC_URL`) and one `eth_sendRawTransaction`
-(`RPC_URL`), which returns as soon as the tx is accepted. Nothing else is on the path — no
-`eth_estimateGas` (Monad charges gas on the limit, so the limit is hardcoded or derived once at
-startup), no `eth_sendRawTransactionSync` (it blocks until the tx is Proposed), no gas price lookup
-(static type-2 fees: `MAX_FEE_GWEI` cap, 2 gwei priority; the effective price is base + priority).
-Receipts, the fee estimate and the vault check run off the hot path on later blocks. Measured in a
-dry run with the mock model: read p50 18 ms, whole loop p50 100 ms (80 ms of it the mock's inference stand-in).
-
-    bun run scripts/bench-read.ts     # book reader vs the SDK: exactness and latency
-    bun run scripts/dry-encode.ts     # signs a buy and a sell offline, asserts the calldata matches the SDK
+Built on [jev-trader](https://github.com/jarrodwatts/jev-trader) by Jarrod Watts (MIT). [Laya](https://huggingface.co/convaiinnovations/laya) by Convai Innovations (Apache 2.0). Market data from Kuru on Monad and Binance's public APIs. Licensed MIT, see [LICENSE](LICENSE).

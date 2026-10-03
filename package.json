@@ -1,5 +1,5 @@
 {
-  "name": "jev-trader",
+  "name": "laya-trader",
   "module": "src/index.ts",
   "type": "module",
   "private": true,

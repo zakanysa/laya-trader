@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Jev Trader",
+  title: "Laya Trader",
   description: "One AI trade decision every Monad block.",
 };
 

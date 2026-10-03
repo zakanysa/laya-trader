@@ -1,23 +1,21 @@
-# Jev Trader — web
+# Laya Trader — web
 
-Next.js (App Router, TypeScript, CSS Modules — no Tailwind) frontend for Jev Trader:
-one AI trade decision every Monad block.
+Next.js (App Router, TypeScript, CSS Modules — no Tailwind) frontend for Laya Trader (inherited from jev-trader):
+one AI trade decision every Monad block. It renders the original directional bot's events; the maker strategy streams its own (`event: maker`), which it does not show yet.
 
 ## Run
 
 ```bash
 export BUN_INSTALL_CACHE_DIR="$TMPDIR/bun-cache" BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
 bun install
-bun run dev      # http://localhost:3000
+bun run dev -p 3001   # http://localhost:3001 (the bot itself serves on 3000)
 bun run build
 ```
-
-Use Bun only — npm is broken on this machine.
 
 ## Config
 
 Copy `.env.example` to `.env.local`. `NEXT_PUBLIC_API_URL` points at the backend
-(default `https://jev-trader-production.up.railway.app`); the app opens an
+(default `http://localhost:3000`, the bot's own server); the app opens an
 EventSource on `$NEXT_PUBLIC_API_URL/events`.
 
 ## Layout

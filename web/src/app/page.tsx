@@ -8,7 +8,7 @@ import StatsRow from "@/components/StatsRow/StatsRow";
 import { useFeed } from "@/lib/useFeed";
 import styles from "./page.module.css";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://jev-trader-production.up.railway.app";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000"; // the bot's own server (src/server.ts)
 
 export default function Page() {
   const feed = useFeed(API_URL);

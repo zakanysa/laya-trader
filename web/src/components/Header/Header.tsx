@@ -43,12 +43,12 @@ export default function Header({ meta, latest, connection }: HeaderProps) {
   }, [wallet]);
 
   const model = meta?.model ?? null;
-  const isJev = (model ?? "").toLowerCase().startsWith("jev");
+  const isJev = /^(jev|laya)/.test((model ?? "").toLowerCase()); // a real model, not the mock stand-in
   const offline = OFFLINE_LABEL[connection] ?? null;
 
   return (
     <div className={styles.header}>
-      <span className={styles.brand}>‖ Jev Trader</span>
+      <span className={styles.brand}>‖ Laya Trader</span>
 
       <span className={styles.block}>block {latest ? fmtInt(latest.block) : "-"}</span>
 

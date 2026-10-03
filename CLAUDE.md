@@ -110,16 +110,11 @@ bun --hot ./index.ts
 
 For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
 
-## The core message (do not break this)
+## This fork
 
-The demo exists to support this tweet. Every design or strategy change must keep all four claims true:
+A research fork of jev-trader; the findings are in RETROSPECTIVE.md. Two strategies share the market plumbing: the original directional bot (`src/trader.ts`, one order per block from a model's buy/sell call: mock, Jev or Laya) and the maker (`STRATEGY=maker`, `src/maker.ts`). The backtest (`scripts/backtest.ts`), the maker's dry run and the strategy share `src/sim.ts`, `src/strategy.ts` and `src/fair.ts`, so a strategy change is tested exactly as it trades.
 
-> I built a trading bot with Jev!
->
-> Jev decides if it should "buy" or "sell", given the price feed of an asset pair, and executes real trades.
->
-> It uses Monad to place the orders on Kuru's on-chain order book in every 300ms block.
->
-> Demo link: https://jev-trader.vercel.app
-
-Non-negotiables: Jev makes the buy/sell call (not code), from the price feed; real trades from a real wallet; an order placed on Kuru's on-chain book every 300 ms block; the demo is the live dashboard. Never decide every N blocks. No middle dots, em dashes or en dashes in any rendered text. No blinking or pulsing indicators.
+- Judge a strategy by P&L without inventory (`invFair`, `--rank hedged`), out of sample, after stress tests; inventory gains are price luck.
+- `tsconfig.json` only covers `src/`; type-check `scripts/` with a temporary config that includes them.
+- `rpc.monad.xyz` allows 50 calls a second, counting every call in a batch; backfills go to `rpc1.monad.xyz` (`READ_RPC_URL`) so a running bot keeps its share.
+- Upstream files use CRLF line endings; keep them.

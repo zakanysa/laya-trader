@@ -1,3 +1,5 @@
+> The product spec of the upstream [jev-trader](https://github.com/jarrodwatts/jev-trader) demo, kept for reference. This fork's goals changed; see [RETROSPECTIVE.md](../RETROSPECTIVE.md).
+
 # Jev Trader — Product Spec
 
 ## One line

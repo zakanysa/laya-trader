@@ -1,0 +1,4 @@
+# Install a CUDA build of torch first on a GPU box (https://pytorch.org/get-started/locally/),
+# otherwise pip pulls whatever build your platform defaults to.
+# The notebook trains against this exact version; keep them in step.
+laya[serve]==0.3.21

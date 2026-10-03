@@ -1,0 +1,8 @@
+{
+  "type": "choice",
+  "instructions": "Kuru MON-USDC order book on Monad, one snapshot per 300 ms block. Will the mid price be higher or lower at the end of the horizon (horizonBlocks blocks from now)? flow is taker volume over the horizon: cvdMon is taker buys minus taker sells. Prices are bps from the current mid, sizes are MON.",
+  "criteria": {
+    "buy": "higher: the mid price rises over the horizon",
+    "sell": "lower: the mid price falls over the horizon"
+  }
+}

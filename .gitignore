@@ -1,3 +1,10 @@
 node_modules
 .env
 data/
+__pycache__/
+# fine-tuned checkpoint downloaded from Kaggle, and the notebook's scratch dir when run locally
+laya-trader/
+laya-trader.zip
+notebooks/work/
+# local Claude Code state
+.claude/

@@ -21,7 +21,7 @@ export async function rpc<T = unknown>(method: string, params: unknown[] = [], u
 export function startBlockFeed(onBlock: (block: number) => void, pollMs = 150) {
   let last = 0, newest = 0, scheduled = false;
   const emit = (block: number) => {
-    if (block <= last) return;
+    if (!Number.isFinite(block) || block <= last) return; // a throttled RPC can answer without a result
     last = newest = block;
     if (scheduled) return;
     scheduled = true;

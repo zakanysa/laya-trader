@@ -1,6 +1,7 @@
 import { experimental_evaluate } from "ai";
 import { typeSafeAi } from "@ai-sdk/typesafe-ai";
 import { config } from "./config";
+import { LayaModel, type LayaState } from "./laya";
 
 /** Models answer buy or sell. `hold` only appears on late blocks (no decision was made). */
 export type Action = "buy" | "sell" | "hold";
@@ -36,7 +37,10 @@ export interface Decision {
 
 export interface Model {
   readonly name: string;
-  decide(state: TradeState): Promise<Decision>;
+  /** Inference price, for the spend counter. */
+  readonly usdPerMTok: number;
+  /** `laya` is the compact view Laya reads; the other models read `state`. */
+  decide(state: TradeState, laya: LayaState): Promise<Decision>;
 }
 
 const QUESTIONS = {
@@ -58,6 +62,7 @@ const QUESTIONS = {
 /** Real Jev via the AI SDK. Swap-in is the MODEL env var. */
 export class JevModel implements Model {
   readonly name = config.jevModelId;
+  readonly usdPerMTok = config.jevUsdPerMTok;
   private model = typeSafeAi.evaluationModel(config.jevModelId);
 
   async decide(state: TradeState): Promise<Decision> {
@@ -79,6 +84,7 @@ export class JevModel implements Model {
 /** Deterministic stand-in: momentum + imbalance + mean reversion toward flat. */
 export class MockModel implements Model {
   readonly name = "mock";
+  readonly usdPerMTok = config.jevUsdPerMTok; // stands in for Jev, spend included
 
   async decide(state: TradeState): Promise<Decision> {
     const t0 = performance.now();
@@ -104,4 +110,4 @@ export class MockModel implements Model {
   }
 }
 
-export const createModel = (): Model => (config.model === "jev" ? new JevModel() : new MockModel());
+export const createModel = (): Model => (config.model === "jev" ? new JevModel() : config.model === "laya" ? new LayaModel() : new MockModel());

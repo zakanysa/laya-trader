@@ -28,9 +28,30 @@ export const config = {
   pendingBlocks: 10, // give up on a tx with no receipt after this many blocks
   refreshBlocks: 200, // how often to refresh the fee estimate, margin balances and the vault check
   horizonBlocks: Number(env("HORIZON_BLOCKS", "100")), // the model is asked about the move over this many blocks (~30 s)
-  model: env("MODEL", "mock") as "mock" | "jev",
+  model: env("MODEL", "mock") as "mock" | "jev" | "laya",
   jevModelId: env("JEV_MODEL_ID", "jev-latest")!,
   jevUsdPerMTok: 0.042,
+  /** laya/server.py (or any server speaking Jev's POST /v1/systemone). */
+  layaUrl: env("LAYA_URL", "http://127.0.0.1:8000")!,
+  layaModel: env("LAYA_MODEL", "laya-trader")!, // a label for logs and the dashboard; the server decides which checkpoint runs
+  layaApiKey: env("LAYA_API_KEY"),
+  /**
+   * "directional": the original bot, one side every block from the model's buy/sell call.
+   * "maker": two-sided quotes around Binance's price (src/strategy.ts), re-sent only when needed.
+   */
+  strategy: env("STRATEGY", "directional") as "directional" | "maker",
+  /** Binance symbol and venue the maker prices from: MONUSDT perp for MON-USDC, BTCUSDT / ETHUSDT spot for cbBTC / WETH. */
+  refSymbol: env("REF_SYMBOL", "MONUSDT")!,
+  refVenue: env("REF_VENUE", "futures") as "futures" | "spot",
+  /** Maker: stop quoting (and cancel everything) once the run is down this much. */
+  maxLossUsd: Number(env("MAX_LOSS_USD", "25")),
+  /** Maker: margin top-ups in the market's own base and quote assets. */
+  marginBase: num("MARGIN_BASE"),
+  marginQuote: num("MARGIN_QUOTE"),
+  /** Kuru MON-USDC, read now and then for MON's price: gas is paid in MON whatever the market. */
+  monMarket: "0x065C9d28E428A0db40191a54d33d5b7c71a9C394",
+  /** Log the Laya view of every block to data/laya/ as training data for the fine-tuning notebook. */
+  stateLog: env("STATE_LOG") === "true",
   port: Number(env("PORT", "3000")),
   historySize: 1000,
 };

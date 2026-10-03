@@ -3,6 +3,7 @@ import { config } from "./config";
 import { Market, type Book, type Fill, type Quote, type QuoteResult, type Side } from "./market";
 import type { Action, Decision, Model, TradeState } from "./model";
 import { TradeFeed, type MakerFill, type TradePrint } from "./trades";
+import { buildLayaState, logLayaState } from "./laya";
 
 export interface BlockEvent {
   block: number;
@@ -101,13 +102,16 @@ export class Trader {
       if (this.mids.length > 400) this.mids.shift();
       this.trades?.poll(block).then(() => this.harvest()); // off the hot path: eth_getLogs for prints (and our fills) since the last poll
 
-      const decision = await this.model.decide(this.buildState(block, book));
+      const laya = buildLayaState(block, book, this.mids, this.trades);
+      // Skip the first horizon after startup: returns and the mid path are still filling in.
+      if (config.stateLog && this.mids.length > config.horizonBlocks) logLayaState(book, laya);
+      const decision = await this.model.decide(this.buildState(block, book), laya);
       const wanted: Side = decision.action === "sell" ? "sell" : "buy";
       const other: Side = wanted === "buy" ? "sell" : "buy";
       // The position cap (and, live, margin funds) can only pick the reducing side. The probabilities still show the model's call.
       const side: Side | null = this.allowed(wanted, book) ? wanted : this.allowed(other, book) ? other : null;
       this.totals.decisions++;
-      this.totals.jevUsd += (decision.inputTokens / 1e6) * config.jevUsdPerMTok;
+      this.totals.jevUsd += (decision.inputTokens / 1e6) * this.model.usdPerMTok;
 
       let quote: Quote | null = null;
       if (side) {
@@ -116,6 +120,7 @@ export class Trader {
         quote = await this.market.send(block, side, config.tradeSizeMon, book, cancel, side !== wanted);
         this.totals.quotes++;
         if (quote.status === "sim") {
+          this.totals.gasMon += quote.gasMon; // what a live run would have paid for this order
           this.orders.clear(); // the simulated cancel
           this.orders.set(--this.simId, { side, price: quote.price, size: quote.size, block });
         } else if (quote.txHash) {
